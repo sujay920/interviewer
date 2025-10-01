@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Target, LucideIcon } from 'lucide-react';
 import { AIFeedback } from '../lib/supabase';
 
 interface FeedbackDisplayProps {
@@ -19,7 +19,7 @@ export function FeedbackDisplay({ feedback, onNewSession }: FeedbackDisplayProps
     return 'bg-red-100';
   };
 
-  const ScoreCard = ({ label, score, icon: Icon }: { label: string; score: number; icon: any }) => (
+  const ScoreCard = ({ label, score, icon: Icon }: { label: string; score: number; icon: LucideIcon }) => (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
       <div className="flex items-center justify-between mb-3">
         <span className="text-gray-600 font-medium">{label}</span>

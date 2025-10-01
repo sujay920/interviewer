@@ -9,7 +9,6 @@ interface InterviewRecorderProps {
 
 export function InterviewRecorder({ question, onRecordingComplete, onCancel }: InterviewRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);

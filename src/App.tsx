@@ -28,13 +28,14 @@ function AppContent() {
     setCurrentView('session');
   };
 
-  const handleRecordingComplete = async (audioBlob: Blob, videoBlob: Blob, durationSeconds: number) => {
+  const handleRecordingComplete = async (audioBlob: Blob, _videoBlob: Blob, durationSeconds: number) => {
     setIsProcessing(true);
 
     try {
       const sessionId = crypto.randomUUID();
 
-      const { data: sessionData, error: sessionError } = await supabase
+      // Create session record
+      const { error: sessionError } = await supabase
         .from('interview_sessions')
         .insert({
           id: sessionId,
@@ -48,56 +49,69 @@ function AppContent() {
 
       if (sessionError) throw sessionError;
 
-      const mockFeedback: AIFeedback = {
-        id: crypto.randomUUID(),
-        session_id: sessionId,
-        overall_score: Math.floor(Math.random() * 30) + 70,
-        clarity_score: Math.floor(Math.random() * 30) + 70,
-        filler_word_count: Math.floor(Math.random() * 15),
-        structure_score: Math.floor(Math.random() * 30) + 70,
-        pace_score: Math.floor(Math.random() * 30) + 70,
-        feedback_text: `Great job on your response! Your answer demonstrated good understanding of the question.
+      // Import the processing functions dynamically
+      const { 
+        transcribeAudio, 
+        analyzeSpeechMetrics,
+        calculateClarityScore,
+        calculateStructureScore,
+        calculatePaceScore 
+      } = await import('./lib/audioProcessing');
+      
+      const { generateAIFeedback } = await import('./lib/aiAnalysis');
 
-You maintained consistent eye contact and spoke with confidence. Your pacing was generally appropriate, though there were a few moments where you could slow down slightly to emphasize key points.
+      // Step 1: Transcribe audio
+      const transcription = await transcribeAudio(audioBlob);
+      
+      // Step 2: Analyze speech metrics
+      const metrics = analyzeSpeechMetrics(transcription);
+      
+      // Step 3: Calculate scores
+      const clarityScore = calculateClarityScore(metrics, transcription);
+      const structureScore = calculateStructureScore(metrics);
+      const paceScore = calculatePaceScore(metrics);
+      
+      // Step 4: Generate AI feedback
+      const feedback = generateAIFeedback(
+        {
+          question: currentQuestion,
+          transcription,
+          metrics,
+          clarityScore,
+          structureScore,
+          paceScore,
+        },
+        sessionId
+      );
 
-Consider structuring your responses using the STAR method (Situation, Task, Action, Result) for behavioral questions to provide more concrete examples.`,
-        strengths: [
-          'Clear and confident delivery',
-          'Good understanding of the question',
-          'Maintained professional demeanor',
-          'Provided specific examples',
-        ],
-        improvements: [
-          'Reduce use of filler words',
-          'Add more quantifiable results',
-          'Improve response structure with frameworks',
-          'Practice smoother transitions between points',
-        ],
-        created_at: new Date().toISOString(),
-      };
+      // Step 5: Store transcription in session
+      await supabase
+        .from('interview_sessions')
+        .update({ 
+          transcription: transcription.text,
+          status: 'completed' 
+        })
+        .eq('id', sessionId);
 
+      // Step 6: Store AI feedback
       const { error: feedbackError } = await supabase
         .from('ai_feedback')
-        .insert(mockFeedback);
+        .insert(feedback);
 
       if (feedbackError) throw feedbackError;
 
-      await supabase
-        .from('interview_sessions')
-        .update({ status: 'completed' })
-        .eq('id', sessionId);
-
+      // Step 7: Update progress metrics
       await supabase
         .from('progress_metrics')
         .insert({
           user_id: user!.id,
           session_id: sessionId,
           metric_date: new Date().toISOString().split('T')[0],
-          average_score: mockFeedback.overall_score,
+          average_score: feedback.overall_score,
           sessions_count: 1,
         });
 
-      setCurrentFeedback(mockFeedback);
+      setCurrentFeedback(feedback);
       setCurrentView('feedback');
     } catch (error) {
       console.error('Error processing recording:', error);

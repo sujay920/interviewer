@@ -6,7 +6,7 @@ interface HeaderProps {
   onViewChange: (view: 'dashboard') => void;
 }
 
-export function Header({ currentView, onViewChange }: HeaderProps) {
+export function Header({ onViewChange }: HeaderProps) {
   const { profile, signOut } = useAuth();
 
   return (
