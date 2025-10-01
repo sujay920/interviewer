@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Video, Square, Mic, MicOff, VideoOff, Play } from 'lucide-react';
+import { Video, Square, Mic, MicOff, VideoOff, Play, AlertCircle } from 'lucide-react';
+import { createSpeechAnalyzer, SpeechAnalysisResult } from '../lib/speechAnalysis';
 
 interface InterviewRecorderProps {
   question: string;
-  onRecordingComplete: (audioBlob: Blob, videoBlob: Blob, durationSeconds: number) => void;
+  onRecordingComplete: (audioBlob: Blob, videoBlob: Blob, durationSeconds: number, speechAnalysis?: SpeechAnalysisResult) => void;
   onCancel: () => void;
 }
 
@@ -14,12 +15,16 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [realTimeTranscript, setRealTimeTranscript] = useState('');
+  const [fillerWordCount, setFillerWordCount] = useState(0);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
+  const speechAnalyzerRef = useRef(createSpeechAnalyzer());
 
   useEffect(() => {
     initializeMedia();
@@ -30,6 +35,7 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      speechAnalyzerRef.current.stopRealTimeAnalysis();
     };
   }, []);
 
@@ -69,6 +75,9 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
     if (!stream) return;
 
     chunksRef.current = [];
+    setRealTimeTranscript('');
+    setFillerWordCount(0);
+    
     const mediaRecorder = new MediaRecorder(stream, {
       mimeType: 'video/webm;codecs=vp8,opus',
     });
@@ -79,16 +88,37 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
       }
     };
 
-    mediaRecorder.onstop = () => {
+    mediaRecorder.onstop = async () => {
+      setIsAnalyzing(true);
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-      onRecordingComplete(audioBlob, blob, recordingTime);
+      
+      try {
+        // Analyze the complete recording
+        const speechAnalysis = await speechAnalyzerRef.current.analyzeAudioBlob(audioBlob, recordingTime);
+        onRecordingComplete(audioBlob, blob, recordingTime, speechAnalysis);
+      } catch (error) {
+        console.error('Speech analysis failed:', error);
+        onRecordingComplete(audioBlob, blob, recordingTime);
+      } finally {
+        setIsAnalyzing(false);
+      }
     };
 
     mediaRecorderRef.current = mediaRecorder;
     mediaRecorder.start(100);
     setIsRecording(true);
     startTimeRef.current = Date.now() - recordingTime * 1000;
+
+    // Start real-time speech analysis
+    speechAnalyzerRef.current.startRealTimeAnalysis(stream, (metrics) => {
+      if (metrics.transcription) {
+        setRealTimeTranscript(metrics.transcription);
+      }
+      if (metrics.fillerWordCount !== undefined) {
+        setFillerWordCount(metrics.fillerWordCount);
+      }
+    });
 
     timerRef.current = window.setInterval(() => {
       setRecordingTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
@@ -98,6 +128,7 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
+      speechAnalyzerRef.current.stopRealTimeAnalysis();
       setIsRecording(false);
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -144,6 +175,36 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           </div>
         )}
       </div>
+
+      {/* Real-time feedback panel */}
+      {isRecording && (
+        <div className="bg-blue-50 border-t border-blue-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-blue-900">Live Analysis</h3>
+            <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-1">
+                <AlertCircle className="w-4 h-4 text-orange-600" />
+                <span className="text-orange-700">Filler words: {fillerWordCount}</span>
+              </div>
+            </div>
+          </div>
+          {realTimeTranscript && (
+            <div className="bg-white rounded-lg p-3 border border-blue-200">
+              <p className="text-sm text-gray-600 mb-1">What you're saying:</p>
+              <p className="text-sm text-gray-900 italic">"{realTimeTranscript}"</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAnalyzing && (
+        <div className="bg-yellow-50 border-t border-yellow-200 p-4">
+          <div className="flex items-center justify-center gap-3">
+            <div className="w-5 h-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-yellow-800 font-medium">Analyzing your speech...</span>
+          </div>
+        </div>
+      )}
 
       <div className="p-6 bg-gray-50">
         <div className="flex items-center justify-center gap-4">
