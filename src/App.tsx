@@ -7,6 +7,8 @@ import { FeedbackDisplay } from './components/FeedbackDisplay';
 import { Header } from './components/Header';
 import { getRandomQuestion } from './data/questions';
 import { supabase, AIFeedback } from './lib/supabase';
+import { SpeechAnalysisResult } from './lib/speechAnalysis';
+import { createAIFeedbackGenerator } from './lib/aiFeedback';
 
 type View = 'dashboard' | 'session' | 'feedback';
 
@@ -28,12 +30,18 @@ function AppContent() {
     setCurrentView('session');
   };
 
-  const handleRecordingComplete = async (audioBlob: Blob, videoBlob: Blob, durationSeconds: number) => {
+  const handleRecordingComplete = async (
+    audioBlob: Blob, 
+    videoBlob: Blob, 
+    durationSeconds: number, 
+    speechAnalysis?: SpeechAnalysisResult
+  ) => {
     setIsProcessing(true);
 
     try {
       const sessionId = crypto.randomUUID();
 
+      // Create session record
       const { data: sessionData, error: sessionError } = await supabase
         .from('interview_sessions')
         .insert({
@@ -42,62 +50,69 @@ function AppContent() {
           question: currentQuestion,
           duration_seconds: durationSeconds,
           status: 'processing',
+          transcription: speechAnalysis?.transcription || '',
         })
         .select()
         .single();
 
       if (sessionError) throw sessionError;
 
-      const mockFeedback: AIFeedback = {
-        id: crypto.randomUUID(),
-        session_id: sessionId,
-        overall_score: Math.floor(Math.random() * 30) + 70,
-        clarity_score: Math.floor(Math.random() * 30) + 70,
-        filler_word_count: Math.floor(Math.random() * 15),
-        structure_score: Math.floor(Math.random() * 30) + 70,
-        pace_score: Math.floor(Math.random() * 30) + 70,
-        feedback_text: `Great job on your response! Your answer demonstrated good understanding of the question.
+      // Generate AI feedback using the speech analysis
+      const feedbackGenerator = createAIFeedbackGenerator();
+      let aiFeedback: AIFeedback;
 
-You maintained consistent eye contact and spoke with confidence. Your pacing was generally appropriate, though there were a few moments where you could slow down slightly to emphasize key points.
+      if (speechAnalysis) {
+        aiFeedback = await feedbackGenerator.generateFeedback({
+          transcription: speechAnalysis.transcription,
+          question: currentQuestion,
+          speechAnalysis,
+          duration: durationSeconds
+        });
+      } else {
+        // Fallback to basic mock feedback if speech analysis failed
+        aiFeedback = {
+          id: crypto.randomUUID(),
+          session_id: sessionId,
+          overall_score: 75,
+          clarity_score: 75,
+          filler_word_count: 5,
+          structure_score: 75,
+          pace_score: 75,
+          feedback_text: 'Unable to analyze speech. Please ensure microphone permissions are granted and try again.',
+          strengths: ['Completed the recording', 'Attempted the question'],
+          improvements: ['Enable speech analysis for detailed feedback', 'Check microphone settings'],
+          created_at: new Date().toISOString(),
+        };
+      }
 
-Consider structuring your responses using the STAR method (Situation, Task, Action, Result) for behavioral questions to provide more concrete examples.`,
-        strengths: [
-          'Clear and confident delivery',
-          'Good understanding of the question',
-          'Maintained professional demeanor',
-          'Provided specific examples',
-        ],
-        improvements: [
-          'Reduce use of filler words',
-          'Add more quantifiable results',
-          'Improve response structure with frameworks',
-          'Practice smoother transitions between points',
-        ],
-        created_at: new Date().toISOString(),
-      };
+      // Set the session ID for the feedback
+      aiFeedback.session_id = sessionId;
 
+      // Store feedback in database
       const { error: feedbackError } = await supabase
         .from('ai_feedback')
-        .insert(mockFeedback);
+        .insert(aiFeedback);
 
       if (feedbackError) throw feedbackError;
 
+      // Update session status
       await supabase
         .from('interview_sessions')
         .update({ status: 'completed' })
         .eq('id', sessionId);
 
+      // Store progress metrics
       await supabase
         .from('progress_metrics')
         .insert({
           user_id: user!.id,
           session_id: sessionId,
           metric_date: new Date().toISOString().split('T')[0],
-          average_score: mockFeedback.overall_score,
+          average_score: aiFeedback.overall_score,
           sessions_count: 1,
         });
 
-      setCurrentFeedback(mockFeedback);
+      setCurrentFeedback(aiFeedback);
       setCurrentView('feedback');
     } catch (error) {
       console.error('Error processing recording:', error);
