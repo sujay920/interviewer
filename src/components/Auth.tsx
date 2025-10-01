@@ -22,28 +22,37 @@ export function Auth() {
       } else {
         await signIn(email, password);
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+      </div>
+
+      <div className="glass-strong rounded-3xl w-full max-w-md p-8 relative z-10 border-glow glow-blue">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
-            <LogIn className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-20 h-20 glass rounded-3xl mb-6 glow-blue float">
+            <LogIn className="w-10 h-10 text-blue-400" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">AI Interview Coach</h1>
-          <p className="text-gray-600 mt-2">Master your interview skills with AI-powered feedback</p>
+          <h1 className="text-4xl font-bold mb-3">
+            <span className="text-gradient-blue">AI Interview Coach</span>
+          </h1>
+          <p className="text-gray-400">Master your interview skills with AI-powered feedback</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {isSignUp && (
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="fullName" className="block text-sm font-medium text-gray-300 mb-2">
                 Full Name
               </label>
               <input
@@ -52,14 +61,14 @@ export function Auth() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required={isSignUp}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 glass rounded-xl focus:glow-blue transition-all duration-300 bg-white/5 text-white placeholder-gray-500 border-0"
                 placeholder="John Doe"
               />
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
               Email
             </label>
             <input
@@ -68,13 +77,13 @@ export function Auth() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              className="w-full px-4 py-3 glass rounded-xl focus:glow-blue transition-all duration-300 bg-white/5 text-white placeholder-gray-500 border-0"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
               Password
             </label>
             <input
@@ -83,13 +92,13 @@ export function Auth() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              className="w-full px-4 py-3 glass rounded-xl focus:glow-blue transition-all duration-300 bg-white/5 text-white placeholder-gray-500 border-0"
               placeholder="••••••••"
             />
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            <div className="glass-strong border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm glow-orange">
               {error}
             </div>
           )}
@@ -97,10 +106,13 @@ export function Auth() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full btn-glass bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 glow-blue shimmer"
           >
             {loading ? (
-              'Processing...'
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Processing...
+              </div>
             ) : isSignUp ? (
               <>
                 <UserPlus className="w-5 h-5" />
@@ -121,7 +133,7 @@ export function Auth() {
               setIsSignUp(!isSignUp);
               setError('');
             }}
-            className="text-blue-600 hover:text-blue-700 font-medium transition"
+            className="text-blue-400 hover:text-blue-300 font-medium transition-colors duration-300"
           >
             {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
           </button>
