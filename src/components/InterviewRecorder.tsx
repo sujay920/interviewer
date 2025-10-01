@@ -111,13 +111,18 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
-        <h2 className="text-2xl font-bold mb-2">Interview Question</h2>
-        <p className="text-blue-100 text-lg leading-relaxed">{question}</p>
+    <div className="glass-strong rounded-3xl overflow-hidden border-glow glow-blue">
+      <div className="glass-strong p-8 border-b border-white/10 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl"></div>
+        <div className="relative z-10">
+          <h2 className="text-3xl font-bold mb-3">
+            <span className="text-gradient-blue">Interview Question</span>
+          </h2>
+          <p className="text-gray-300 text-lg leading-relaxed">{question}</p>
+        </div>
       </div>
 
-      <div className="relative bg-gray-900 aspect-video">
+      <div className="relative bg-black aspect-video overflow-hidden">
         <video
           ref={videoRef}
           autoPlay
@@ -127,54 +132,60 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
         />
 
         {isRecording && (
-          <div className="absolute top-4 left-4 bg-red-600 text-white px-4 py-2 rounded-full flex items-center gap-2 animate-pulse">
-            <div className="w-3 h-3 bg-white rounded-full"></div>
-            <span className="font-semibold">Recording</span>
+          <div className="absolute top-4 left-4 glass-strong border-red-500/30 px-5 py-3 rounded-2xl flex items-center gap-3 glow-pulse">
+            <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
+            <span className="font-semibold text-red-400">Recording</span>
           </div>
         )}
 
-        <div className="absolute top-4 right-4 bg-black bg-opacity-70 text-white px-4 py-2 rounded-full font-mono text-lg">
+        <div className="absolute top-4 right-4 glass-strong px-6 py-3 rounded-2xl font-mono text-xl text-cyan-400 glow-cyan">
           {formatTime(recordingTime)}
         </div>
 
         {!isCameraOn && (
-          <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+          <div className="absolute inset-0 glass-strong flex items-center justify-center">
             <VideoOff className="w-24 h-24 text-gray-600" />
           </div>
         )}
       </div>
 
-      <div className="p-6 bg-gray-50">
-        <div className="flex items-center justify-center gap-4">
+      <div className="p-8 glass">
+        <div className="flex items-center justify-center gap-4 flex-wrap">
           <button
             onClick={toggleCamera}
-            className={`p-4 rounded-full transition ${
+            className={`p-4 rounded-2xl transition-all duration-300 ${
               isCameraOn
-                ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                : 'bg-red-100 hover:bg-red-200 text-red-700'
+                ? 'glass glow-cyan hover:scale-110'
+                : 'glass-strong border-red-500/30 glow-orange'
             }`}
             title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
           >
-            {isCameraOn ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+            {isCameraOn ? 
+              <Video className="w-6 h-6 text-cyan-400" /> : 
+              <VideoOff className="w-6 h-6 text-red-400" />
+            }
           </button>
 
           <button
             onClick={toggleMic}
-            className={`p-4 rounded-full transition ${
+            className={`p-4 rounded-2xl transition-all duration-300 ${
               isMicOn
-                ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                : 'bg-red-100 hover:bg-red-200 text-red-700'
+                ? 'glass glow-purple hover:scale-110'
+                : 'glass-strong border-red-500/30 glow-orange'
             }`}
             title={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
           >
-            {isMicOn ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+            {isMicOn ? 
+              <Mic className="w-6 h-6 text-purple-400" /> : 
+              <MicOff className="w-6 h-6 text-red-400" />
+            }
           </button>
 
           {!isRecording ? (
             <button
               onClick={startRecording}
               disabled={!stream}
-              className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-full font-semibold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
+              className="btn-glass bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white px-10 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 glow-orange shimmer hover:scale-105"
             >
               <Play className="w-6 h-6" />
               Start Recording
@@ -182,7 +193,7 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           ) : (
             <button
               onClick={stopRecording}
-              className="bg-gray-800 hover:bg-gray-900 text-white px-8 py-4 rounded-full font-semibold text-lg transition flex items-center gap-3"
+              className="btn-glass bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white px-10 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 flex items-center gap-3 glow-blue shimmer hover:scale-105"
             >
               <Square className="w-6 h-6" />
               Stop & Submit
@@ -191,15 +202,15 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
 
           <button
             onClick={onCancel}
-            className="px-6 py-4 text-gray-600 hover:text-gray-800 font-medium transition"
+            className="px-8 py-4 glass hover:glow-purple text-gray-400 hover:text-purple-400 font-medium transition-all duration-300 rounded-2xl"
           >
             Cancel
           </button>
         </div>
 
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>Take your time to answer the question thoroughly.</p>
-          <p className="mt-1">AI will analyze your response for clarity, structure, and delivery.</p>
+        <div className="mt-6 text-center">
+          <p className="text-gray-400">Take your time to answer the question thoroughly.</p>
+          <p className="mt-2 text-gray-500 text-sm">AI will analyze your response for clarity, structure, and delivery.</p>
         </div>
       </div>
     </div>

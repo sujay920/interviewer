@@ -127,10 +127,14 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+        </div>
+        <div className="text-center relative z-10">
+          <div className="glass-strong w-20 h-20 border-4 border-blue-500/50 border-t-blue-500 rounded-full animate-spin mx-auto mb-6 glow-blue"></div>
+          <p className="text-gray-300 text-lg">Loading...</p>
         </div>
       </div>
     );
@@ -142,21 +146,28 @@ function AppContent() {
 
   if (isProcessing) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="w-20 h-20 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Processing Your Response</h2>
-          <p className="text-gray-600">AI is analyzing your interview performance...</p>
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        </div>
+        <div className="text-center max-w-md relative z-10">
+          <div className="glass-strong w-24 h-24 border-4 border-cyan-500/50 border-t-cyan-500 rounded-full animate-spin mx-auto mb-8 glow-cyan"></div>
+          <h2 className="text-3xl font-bold mb-4">
+            <span className="text-gradient-cyan">Processing Your Response</span>
+          </h2>
+          <p className="text-gray-400 text-lg">AI is analyzing your interview performance...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <Header currentView={currentView} onViewChange={setCurrentView} />
 
-      <main className="py-8 px-4 sm:px-6 lg:px-8">
+      <main className="py-8 px-4 sm:px-6 lg:px-8 relative">
         {currentView === 'dashboard' && (
           <Dashboard onNewSession={handleStartNewSession} />
         )}
