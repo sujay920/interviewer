@@ -32,6 +32,19 @@ function AppContent() {
     setIsProcessing(true);
 
     try {
+      // Validate inputs
+      if (!audioBlob || audioBlob.size === 0) {
+        throw new Error('Invalid audio recording');
+      }
+      
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      if (durationSeconds < 1) {
+        throw new Error('Recording too short');
+      }
+
       const sessionId = crypto.randomUUID();
 
       // Create session record
@@ -39,7 +52,7 @@ function AppContent() {
         .from('interview_sessions')
         .insert({
           id: sessionId,
-          user_id: user!.id,
+          user_id: user.id,
           question: currentQuestion,
           duration_seconds: durationSeconds,
           status: 'processing',

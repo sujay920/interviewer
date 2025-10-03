@@ -24,19 +24,36 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
 
   useEffect(() => {
     initializeMedia();
+  }, []);
+
+  useEffect(() => {
     return () => {
+      // Clean up stream
       if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach(track => {
+          track.stop();
+          track.enabled = false;
+        });
       }
+      
+      // Clean up timer
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      
+      // Clean up media recorder
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
       }
     };
-  }, []);
+  }, [stream]);
 
   const initializeMedia = async () => {
     try {
       setError('');
+      setMediaInitialized(false);
+      
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
@@ -49,20 +66,37 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           sampleRate: 44100
         },
       });
+      
+      // Verify we have both video and audio tracks
+      const videoTracks = mediaStream.getVideoTracks();
+      const audioTracks = mediaStream.getAudioTracks();
+      
+      if (videoTracks.length === 0) {
+        throw new Error('No video track available');
+      }
+      
+      if (audioTracks.length === 0) {
+        throw new Error('No audio track available');
+      }
+      
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
       setMediaInitialized(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error accessing media devices:', error);
-      const errorMessage = error.name === 'NotAllowedError'
+      const errorMessage = error instanceof Error && error.name === 'NotAllowedError'
         ? 'Camera and microphone access denied. Please grant permissions and refresh.'
-        : error.name === 'NotFoundError'
+        : error instanceof Error && error.name === 'NotFoundError'
         ? 'No camera or microphone found. Please connect devices and refresh.'
+        : error instanceof Error && error.name === 'NotReadableError'
+        ? 'Camera or microphone is being used by another application. Please close other apps and refresh.'
+        : error instanceof Error && error.message
+        ? error.message
         : 'Unable to access camera and microphone. Please check your devices.';
       setError(errorMessage);
-      alert(errorMessage);
+      setMediaInitialized(false);
     }
   };
 
@@ -95,7 +129,8 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'video/webm';
         if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/mp4';
+          // Fallback to basic webm without codecs
+          mimeType = 'video/webm';
         }
       }
 
@@ -118,6 +153,10 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
         }
 
         const videoBlob = new Blob(chunksRef.current, { type: mimeType });
+        
+        // Create audio blob by extracting audio from the video stream
+        // For now, we'll use the same blob but with audio mime type
+        // In a production app, you'd want to record audio separately or extract it properly
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
 
         if (videoBlob.size === 0) {
@@ -128,7 +167,7 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
         onRecordingComplete(audioBlob, videoBlob, recordingTime);
       };
 
-      mediaRecorder.onerror = (event: any) => {
+      mediaRecorder.onerror = (event: Event) => {
         console.error('MediaRecorder error:', event);
         setError('Recording error occurred. Please try again.');
         setIsRecording(false);
@@ -143,9 +182,10 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
       timerRef.current = window.setInterval(() => {
         setRecordingTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 1000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting recording:', err);
-      setError('Failed to start recording: ' + err.message);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError('Failed to start recording: ' + errorMessage);
     }
   };
 
@@ -159,10 +199,14 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
         mediaRecorderRef.current.stop();
       }
       setIsRecording(false);
+      
+      // Clear timer and reset recording time
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
       }
-    } catch (err: any) {
+      setRecordingTime(0);
+    } catch (err: unknown) {
       console.error('Error stopping recording:', err);
       setError('Failed to stop recording properly');
     }
@@ -220,6 +264,15 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           </div>
         )}
         <div className="flex items-center justify-center gap-4 flex-wrap">
+          {error && (
+            <button
+              onClick={initializeMedia}
+              className="px-6 py-3 glass-strong border border-blue-400/40 hover:border-blue-400/60 text-blue-400 font-medium transition-all duration-300 rounded-2xl hover:scale-105"
+            >
+              Retry Media Access
+            </button>
+          )}
+          
           <button
             onClick={toggleCamera}
             className={`p-4 rounded-2xl transition-all duration-300 ${
@@ -228,6 +281,7 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
                 : 'glass-strong border-red-500/30 glow-orange'
             }`}
             title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+            disabled={!stream}
           >
             {isCameraOn ? 
               <Video className="w-6 h-6 text-cyan-400" /> : 
@@ -243,6 +297,7 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
                 : 'glass-strong border-red-500/30 glow-orange'
             }`}
             title={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
+            disabled={!stream}
           >
             {isMicOn ? 
               <Mic className="w-6 h-6 text-purple-400" /> : 

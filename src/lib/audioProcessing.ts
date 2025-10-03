@@ -55,13 +55,24 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
   // In production, you'd call an API like OpenAI Whisper, Google Speech-to-Text, or AssemblyAI
   
   try {
+    // Validate blob
+    if (!audioBlob || audioBlob.size === 0) {
+      throw new Error('Invalid audio blob');
+    }
+    
     // Try to use the Web Speech API if available (this is a simplified version)
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
     
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        URL.revokeObjectURL(audioUrl);
+        reject(new Error('Audio loading timeout'));
+      }, 10000); // 10 second timeout
+      
       audio.addEventListener('loadedmetadata', () => {
-        const duration = audio.duration;
+        clearTimeout(timeout);
+        const duration = audio.duration || 30; // Fallback duration
         
         // For now, generate a realistic mock transcription
         // In production, replace this with actual API call
@@ -71,12 +82,17 @@ export async function transcribeAudio(audioBlob: Blob): Promise<TranscriptionRes
         URL.revokeObjectURL(audioUrl);
       });
       
-      audio.addEventListener('error', () => {
+      audio.addEventListener('error', (e) => {
+        clearTimeout(timeout);
+        console.warn('Audio loading error:', e);
         // Fallback to basic mock
         const mockTranscription = generateMockTranscription(30);
         resolve(mockTranscription);
         URL.revokeObjectURL(audioUrl);
       });
+      
+      // Start loading the audio
+      audio.load();
     });
   } catch (error) {
     console.error('Transcription error:', error);
