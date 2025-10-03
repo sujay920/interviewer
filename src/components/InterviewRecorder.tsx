@@ -15,28 +15,51 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
   const [mediaInitialized, setMediaInitialized] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
+  const isStoppingRef = useRef<boolean>(false);
 
   useEffect(() => {
     initializeMedia();
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      cleanup();
     };
   }, []);
+
+  const cleanup = () => {
+    // Stop all tracks
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        track.stop();
+      });
+    }
+    
+    // Clear timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    // Stop media recorder if running
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.error('Error stopping media recorder during cleanup:', e);
+      }
+    }
+  };
 
   const initializeMedia = async () => {
     try {
       setError('');
+      setMediaInitialized(false);
+      
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
@@ -49,10 +72,13 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           sampleRate: 44100
         },
       });
+      
       setStream(mediaStream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
+      
       setMediaInitialized(true);
     } catch (error: any) {
       console.error('Error accessing media devices:', error);
@@ -62,23 +88,26 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
         ? 'No camera or microphone found. Please connect devices and refresh.'
         : 'Unable to access camera and microphone. Please check your devices.';
       setError(errorMessage);
-      alert(errorMessage);
     }
   };
 
   const toggleCamera = () => {
     if (stream) {
       const videoTrack = stream.getVideoTracks()[0];
-      videoTrack.enabled = !videoTrack.enabled;
-      setIsCameraOn(videoTrack.enabled);
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsCameraOn(videoTrack.enabled);
+      }
     }
   };
 
   const toggleMic = () => {
     if (stream) {
       const audioTrack = stream.getAudioTracks()[0];
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsMicOn(audioTrack.enabled);
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMicOn(audioTrack.enabled);
+      }
     }
   };
 
@@ -88,22 +117,43 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
       return;
     }
 
+    if (isRecording || isProcessing) {
+      return;
+    }
+
     try {
       chunksRef.current = [];
+      isStoppingRef.current = false;
 
-      let mimeType = 'video/webm;codecs=vp8,opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/mp4';
+      // Determine best supported MIME type
+      let mimeType = '';
+      const types = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=h264,opus',
+        'video/webm',
+        'video/mp4'
+      ];
+      
+      for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
         }
       }
 
-      const mediaRecorder = new MediaRecorder(stream, {
+      if (!mimeType) {
+        setError('Your browser does not support video recording.');
+        return;
+      }
+
+      const options: MediaRecorderOptions = {
         mimeType,
         videoBitsPerSecond: 2500000,
         audioBitsPerSecond: 128000
-      });
+      };
+
+      const mediaRecorder = new MediaRecorder(stream, options);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -112,59 +162,123 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
       };
 
       mediaRecorder.onstop = () => {
-        if (chunksRef.current.length === 0) {
-          setError('Recording failed: no data captured');
-          return;
+        if (isStoppingRef.current) {
+          return; // Already being handled
         }
-
-        const videoBlob = new Blob(chunksRef.current, { type: mimeType });
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-
-        if (videoBlob.size === 0) {
-          setError('Recording failed: no data saved');
-          return;
-        }
-
-        onRecordingComplete(audioBlob, videoBlob, recordingTime);
+        
+        isStoppingRef.current = true;
+        handleRecordingStop(mimeType);
       };
 
       mediaRecorder.onerror = (event: any) => {
         console.error('MediaRecorder error:', event);
         setError('Recording error occurred. Please try again.');
         setIsRecording(false);
+        setIsProcessing(false);
+        isStoppingRef.current = false;
+        
+        // Clear timer
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
       };
 
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start(1000);
+      
+      // Start recording with timeslice for regular data availability
+      mediaRecorder.start(100);
+      
       setIsRecording(true);
       setError('');
       startTimeRef.current = Date.now();
+      setRecordingTime(0);
 
       timerRef.current = window.setInterval(() => {
         setRecordingTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 1000);
+      
     } catch (err: any) {
       console.error('Error starting recording:', err);
       setError('Failed to start recording: ' + err.message);
+      setIsRecording(false);
+    }
+  };
+
+  const handleRecordingStop = (mimeType: string) => {
+    setIsProcessing(true);
+
+    try {
+      if (chunksRef.current.length === 0) {
+        setError('Recording failed: no data captured');
+        setIsProcessing(false);
+        isStoppingRef.current = false;
+        return;
+      }
+
+      // Create blobs from recorded chunks
+      const videoBlob = new Blob(chunksRef.current, { type: mimeType });
+      
+      // Create audio-only blob (extract audio or use same blob)
+      const audioBlob = new Blob(chunksRef.current, { 
+        type: mimeType.includes('webm') ? 'audio/webm' : 'audio/mp4' 
+      });
+
+      if (videoBlob.size === 0) {
+        setError('Recording failed: no data saved');
+        setIsProcessing(false);
+        isStoppingRef.current = false;
+        return;
+      }
+
+      const finalDuration = recordingTime;
+
+      // Small delay to ensure all chunks are processed
+      setTimeout(() => {
+        onRecordingComplete(audioBlob, videoBlob, finalDuration);
+        setIsProcessing(false);
+        isStoppingRef.current = false;
+      }, 100);
+      
+    } catch (err: any) {
+      console.error('Error processing recording:', err);
+      setError('Failed to process recording: ' + err.message);
+      setIsProcessing(false);
+      isStoppingRef.current = false;
     }
   };
 
   const stopRecording = () => {
-    if (!mediaRecorderRef.current || !isRecording) {
+    if (!mediaRecorderRef.current || !isRecording || isProcessing) {
       return;
     }
 
     try {
-      if (mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
       setIsRecording(false);
+      
+      // Clear timer immediately
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
       }
+
+      // Stop the media recorder
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      } else if (mediaRecorderRef.current.state === 'paused') {
+        mediaRecorderRef.current.resume();
+        setTimeout(() => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        }, 0);
+      }
+      
     } catch (err: any) {
       console.error('Error stopping recording:', err);
       setError('Failed to stop recording properly');
+      setIsProcessing(false);
+      isStoppingRef.current = false;
     }
   };
 
@@ -172,6 +286,20 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleCancel = () => {
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    onCancel();
   };
 
   return (
@@ -202,6 +330,13 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           </div>
         )}
 
+        {isProcessing && (
+          <div className="absolute top-4 left-4 glass-strong border-blue-500/30 px-5 py-3 rounded-2xl flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+            <span className="font-semibold text-blue-400">Processing...</span>
+          </div>
+        )}
+
         <div className="absolute top-4 right-4 glass-strong px-6 py-3 rounded-2xl font-mono text-xl text-cyan-400 glow-cyan">
           {formatTime(recordingTime)}
         </div>
@@ -222,11 +357,12 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
         <div className="flex items-center justify-center gap-4 flex-wrap">
           <button
             onClick={toggleCamera}
+            disabled={isRecording || isProcessing}
             className={`p-4 rounded-2xl transition-all duration-300 ${
               isCameraOn
                 ? 'glass glow-cyan hover:scale-110'
                 : 'glass-strong border-red-500/30 glow-orange'
-            }`}
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
             title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
           >
             {isCameraOn ? 
@@ -237,11 +373,12 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
 
           <button
             onClick={toggleMic}
+            disabled={isRecording || isProcessing}
             className={`p-4 rounded-2xl transition-all duration-300 ${
               isMicOn
                 ? 'glass glow-purple hover:scale-110'
                 : 'glass-strong border-red-500/30 glow-orange'
-            }`}
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
             title={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
           >
             {isMicOn ? 
@@ -253,7 +390,7 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           {!isRecording ? (
             <button
               onClick={startRecording}
-              disabled={!stream || !mediaInitialized || isRecording}
+              disabled={!stream || !mediaInitialized || isRecording || isProcessing}
               className="glass-strong border border-red-400/40 hover:border-red-400/60 text-white px-10 py-5 rounded-full font-semibold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 glow-strong hover:scale-105"
             >
               <Play className="w-6 h-6" />
@@ -262,17 +399,18 @@ export function InterviewRecorder({ question, onRecordingComplete, onCancel }: I
           ) : (
             <button
               onClick={stopRecording}
-              disabled={!isRecording}
+              disabled={!isRecording || isProcessing}
               className="glass-strong border border-blue-400/40 hover:border-blue-400/60 text-white px-10 py-5 rounded-full font-semibold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 glow hover:scale-105"
             >
               <Square className="w-6 h-6" />
-              Stop & Submit
+              {isProcessing ? 'Processing...' : 'Stop & Submit'}
             </button>
           )}
 
           <button
-            onClick={onCancel}
-            className="px-8 py-4 glass hover:glow-purple text-gray-400 hover:text-purple-400 font-medium transition-all duration-300 rounded-2xl"
+            onClick={handleCancel}
+            disabled={isProcessing}
+            className="px-8 py-4 glass hover:glow-purple text-gray-400 hover:text-purple-400 font-medium transition-all duration-300 rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
